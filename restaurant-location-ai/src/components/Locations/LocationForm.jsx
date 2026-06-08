@@ -1,0 +1,186 @@
+import { useState } from 'react';
+import { X } from 'lucide-react';
+import { SCORE_LABELS } from '../../lib/scoring';
+
+const EMPTY = {
+  name: '',
+  address: '',
+  city: '',
+  state: '',
+  lat: '',
+  lng: '',
+  status: 'candidate',
+  foot_traffic_score:  50,
+  competition_score:   50,
+  demographics_score:  50,
+  accessibility_score: 50,
+  rent_score:          50,
+  monthly_rent: '',
+  square_footage: '',
+  parking_spaces: '',
+  notes: '',
+};
+
+function Field({ label, children }) {
+  return (
+    <div>
+      <label className="block text-xs font-medium text-gray-700 mb-1">{label}</label>
+      {children}
+    </div>
+  );
+}
+
+function Input({ className = '', ...props }) {
+  return (
+    <input
+      className={`w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-400 focus:border-transparent ${className}`}
+      {...props}
+    />
+  );
+}
+
+function ScoreSlider({ label, name, value, onChange }) {
+  const color = value >= 75 ? '#22c55e' : value >= 55 ? '#f59e0b' : '#ef4444';
+  return (
+    <div>
+      <div className="flex justify-between text-xs text-gray-600 mb-1">
+        <span>{label}</span>
+        <span className="font-semibold" style={{ color }}>{value}</span>
+      </div>
+      <input
+        type="range"
+        name={name}
+        min={0}
+        max={100}
+        value={value}
+        onChange={onChange}
+        className="w-full accent-brand-500 h-2"
+      />
+    </div>
+  );
+}
+
+export default function LocationForm({ initial, onSubmit, onCancel, loading }) {
+  const [form, setForm] = useState({ ...EMPTY, ...initial });
+
+  const set = e => {
+    const { name, value, type } = e.target;
+    setForm(f => ({ ...f, [name]: type === 'range' || type === 'number' ? Number(value) : value }));
+  };
+
+  const handleSubmit = e => {
+    e.preventDefault();
+    onSubmit({
+      ...form,
+      lat: parseFloat(form.lat),
+      lng: parseFloat(form.lng),
+      monthly_rent:   form.monthly_rent   ? parseFloat(form.monthly_rent)   : null,
+      square_footage: form.square_footage ? parseInt(form.square_footage)   : null,
+      parking_spaces: form.parking_spaces ? parseInt(form.parking_spaces)   : null,
+    });
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-xl max-h-[90vh] flex flex-col">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
+          <h2 className="font-bold text-gray-900">{initial?.id ? 'Edit Location' : 'Add Location'}</h2>
+          <button onClick={onCancel} className="p-1.5 rounded-lg hover:bg-gray-100 transition-colors">
+            <X className="w-4 h-4 text-gray-600" />
+          </button>
+        </div>
+
+        <form onSubmit={handleSubmit} className="overflow-y-auto flex-1 px-6 py-4 space-y-4">
+          <div className="grid grid-cols-2 gap-3">
+            <Field label="Location Name *">
+              <Input name="name" value={form.name} onChange={set} required placeholder="e.g. Downtown Corner" />
+            </Field>
+            <Field label="Status">
+              <select
+                name="status"
+                value={form.status}
+                onChange={set}
+                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-400"
+              >
+                <option value="candidate">Candidate</option>
+                <option value="under_review">Under Review</option>
+                <option value="active">Active</option>
+                <option value="rejected">Rejected</option>
+              </select>
+            </Field>
+          </div>
+
+          <Field label="Address *">
+            <Input name="address" value={form.address} onChange={set} required placeholder="123 Main St" />
+          </Field>
+
+          <div className="grid grid-cols-2 gap-3">
+            <Field label="City *">
+              <Input name="city" value={form.city} onChange={set} required placeholder="Austin" />
+            </Field>
+            <Field label="State">
+              <Input name="state" value={form.state} onChange={set} placeholder="TX" />
+            </Field>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <Field label="Latitude *">
+              <Input name="lat" type="number" step="any" value={form.lat} onChange={set} required placeholder="30.2672" />
+            </Field>
+            <Field label="Longitude *">
+              <Input name="lng" type="number" step="any" value={form.lng} onChange={set} required placeholder="-97.7431" />
+            </Field>
+          </div>
+
+          <div className="bg-gray-50 rounded-xl p-4 space-y-3">
+            <p className="text-xs font-semibold text-gray-700 uppercase tracking-wide">Scoring Dimensions</p>
+            {Object.entries(SCORE_LABELS).map(([key, label]) => (
+              <ScoreSlider key={key} label={label} name={key} value={form[key]} onChange={set} />
+            ))}
+          </div>
+
+          <div className="grid grid-cols-3 gap-3">
+            <Field label="Monthly Rent ($)">
+              <Input name="monthly_rent" type="number" value={form.monthly_rent} onChange={set} placeholder="6000" />
+            </Field>
+            <Field label="Sq Footage">
+              <Input name="square_footage" type="number" value={form.square_footage} onChange={set} placeholder="2000" />
+            </Field>
+            <Field label="Parking Spots">
+              <Input name="parking_spaces" type="number" value={form.parking_spaces} onChange={set} placeholder="20" />
+            </Field>
+          </div>
+
+          <Field label="Notes">
+            <textarea
+              name="notes"
+              value={form.notes}
+              onChange={set}
+              rows={3}
+              className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-400 resize-none"
+              placeholder="Additional observations..."
+            />
+          </Field>
+        </form>
+
+        <div className="flex gap-3 px-6 py-4 border-t border-gray-100">
+          <button
+            type="button"
+            onClick={onCancel}
+            className="flex-1 py-2.5 rounded-xl border border-gray-200 text-sm font-medium text-gray-600 hover:bg-gray-50 transition-colors"
+          >
+            Cancel
+          </button>
+          <button
+            type="submit"
+            disabled={loading}
+            onClick={handleSubmit}
+            className="flex-1 py-2.5 rounded-xl bg-brand-500 text-white text-sm font-medium hover:bg-brand-600 transition-colors disabled:opacity-50"
+          >
+            {loading ? 'Saving…' : initial?.id ? 'Save Changes' : 'Add Location'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
