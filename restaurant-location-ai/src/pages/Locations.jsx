@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Plus, Search, SlidersHorizontal, Loader2, Building2 } from 'lucide-react';
+import { Plus, Search, Loader2, Store } from 'lucide-react';
 import { useLocations } from '../hooks/useLocations';
 import LocationCard from '../components/Locations/LocationCard';
 import LocationForm from '../components/Locations/LocationForm';
@@ -52,8 +52,8 @@ export default function Locations() {
       {/* Header */}
       <div className="flex items-center justify-between mb-5 gap-3">
         <div className="flex items-center gap-2">
-          <Building2 className="w-5 h-5 text-brand-500" />
-          <h1 className="text-xl font-bold text-gray-900">Locations</h1>
+          <Store className="w-5 h-5 text-brand-500" />
+          <h1 className="text-xl font-bold text-gray-900">Stores</h1>
           <span className="text-sm text-gray-400">({locations.length})</span>
         </div>
         <button
@@ -61,7 +61,7 @@ export default function Locations() {
           className="flex items-center gap-2 px-4 py-2 bg-brand-500 text-white rounded-xl text-sm font-medium hover:bg-brand-600 transition-colors"
         >
           <Plus className="w-4 h-4" />
-          <span className="hidden sm:inline">Add Location</span>
+          <span className="hidden sm:inline">Add Store</span>
         </button>
       </div>
 
@@ -106,9 +106,9 @@ export default function Locations() {
         </div>
       ) : filtered.length === 0 ? (
         <div className="text-center py-16 text-gray-400">
-          <Building2 className="w-12 h-12 mx-auto mb-3 opacity-30" />
-          <p className="font-medium">No locations found</p>
-          <p className="text-sm mt-1">Try adjusting your filters or add a new location.</p>
+          <Store className="w-12 h-12 mx-auto mb-3 opacity-30" />
+          <p className="font-medium">No stores found</p>
+          <p className="text-sm mt-1">Try adjusting your filters or add a new store.</p>
         </div>
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">

@@ -57,3 +57,23 @@ export function rankLocations(locations) {
     return sb - sa;
   });
 }
+
+/**
+ * Derives dimension scores from AUV so users don't have to set sliders manually.
+ * Scale: $300K = weak (35) → $2M+ = strong (90).
+ */
+export function autoScoresFromAUV(auv) {
+  if (!auv || auv <= 0) return {
+    foot_traffic_score: 50, competition_score: 50,
+    demographics_score: 50, accessibility_score: 50, rent_score: 50,
+  };
+  const norm = Math.min(1, Math.max(0, (auv / 1_000_000 - 0.3) / 1.7));
+  const base = Math.round(35 + norm * 55);
+  return {
+    foot_traffic_score:  Math.min(100, base + 8),
+    demographics_score:  Math.min(100, base + 3),
+    accessibility_score: Math.min(100, base + 5),
+    competition_score:   Math.min(100, base + 12),
+    rent_score:          Math.max(20,  base - 8),
+  };
+}

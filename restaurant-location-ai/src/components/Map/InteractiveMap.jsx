@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react';
-import { MapContainer, TileLayer, CircleMarker, Popup, useMap } from 'react-leaflet';
+import { MapContainer, TileLayer, CircleMarker, Popup, useMap, useMapEvents } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
 import { computeOverallScore } from '../../lib/scoring';
 import { generateDemandPoints } from '../../lib/expansion';
@@ -8,7 +8,7 @@ const SATELLITE_URL =
   'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}';
 const SATELLITE_ATTRIBUTION = '&copy; Esri';
 
-function scoreColor(score) {
+function markerColor(score) {
   if (score >= 75) return '#22c55e';
   if (score >= 55) return '#f59e0b';
   return '#ef4444';
@@ -26,6 +26,22 @@ function MapController({ flyTo }) {
   return null;
 }
 
+function RightClickHandler({ onRightClick }) {
+  useMapEvents({
+    contextmenu(e) {
+      e.originalEvent.preventDefault();
+      onRightClick({ lat: e.latlng.lat, lng: e.latlng.lng });
+    },
+  });
+  return null;
+}
+
+function isValid(lat, lng) {
+  return typeof lat === 'number' && typeof lng === 'number' &&
+    !isNaN(lat) && !isNaN(lng) &&
+    lat >= -90 && lat <= 90 && lng >= -180 && lng <= 180;
+}
+
 export default function InteractiveMap({
   locations,
   showHeatmap,
@@ -33,8 +49,10 @@ export default function InteractiveMap({
   onSelectLocation,
   flyTo,
   recommendations = [],
+  onRightClick,
 }) {
   const demandPoints = showHeatmap ? generateDemandPoints(locations) : [];
+  const validLocations = locations.filter(l => isValid(l.lat, l.lng));
 
   return (
     <div className="w-full h-full rounded-xl overflow-hidden border border-gray-100">
@@ -46,8 +64,9 @@ export default function InteractiveMap({
       >
         <TileLayer attribution={SATELLITE_ATTRIBUTION} url={SATELLITE_URL} />
         <MapController flyTo={flyTo} />
+        {onRightClick && <RightClickHandler onRightClick={onRightClick} />}
 
-        {/* Demand heatmap circles */}
+        {/* Demand heatmap */}
         {showHeatmap &&
           demandPoints.map((pt, idx) => (
             <CircleMarker
@@ -61,33 +80,33 @@ export default function InteractiveMap({
             />
           ))}
 
-        {/* AI expansion recommendation markers */}
+        {/* AI expansion markers */}
         {recommendations.map((rec, idx) => (
           <CircleMarker
             key={`rec-${idx}`}
             center={[rec.lat, rec.lng]}
             radius={14}
             fillColor="#8b5cf6"
-            fillOpacity={0.8}
+            fillOpacity={0.85}
             color="#6d28d9"
             weight={2}
           >
             <Popup>
               <div style={{ fontFamily: 'system-ui, sans-serif', minWidth: 200 }}>
                 <p style={{ fontWeight: 700, margin: '0 0 5px', fontSize: 13, color: '#7c3aed' }}>
-                  AI Site Recommendation #{idx + 1}
+                  AI Site #{idx + 1}
                 </p>
                 <span style={{
-                  background: '#8b5cf6', color: 'white',
+                  background: '#8b5cf6', color: '#fff',
                   padding: '2px 10px', borderRadius: 999,
-                  fontSize: 12, fontWeight: 700, display: 'inline-block', marginBottom: 8,
+                  fontSize: 12, fontWeight: 700, display: 'inline-block', marginBottom: 7,
                 }}>
                   Score: {rec.score} / 100
                 </span>
                 <p style={{ fontSize: 12, color: '#444', margin: '0 0 4px' }}>
-                  <strong>{rec.distanceToNearest.toFixed(1)} mi</strong> from {rec.nearestStore}
+                  {rec.distanceToNearest.toFixed(1)} mi from {rec.nearestStore}
                 </p>
-                <p style={{ fontSize: 11, color: '#777', margin: 0, fontStyle: 'italic', lineHeight: 1.4 }}>
+                <p style={{ fontSize: 11, color: '#777', margin: 0, fontStyle: 'italic', lineHeight: 1.45 }}>
                   {rec.reasoning}
                 </p>
               </div>
@@ -96,50 +115,40 @@ export default function InteractiveMap({
         ))}
 
         {/* Your location markers */}
-        {locations.map((loc) => {
+        {validLocations.map((loc) => {
           const score = computeOverallScore(loc);
-          const color = scoreColor(score);
+          const color = markerColor(score);
           const selected = selectedIds.includes(loc.id);
-          const auvDisplay =
-            loc.avg_unit_volume && loc.avg_unit_volume > 0
-              ? `$${(loc.avg_unit_volume / 1_000_000).toFixed(2)}M`
-              : null;
 
           return (
             <CircleMarker
               key={loc.id}
               center={[loc.lat, loc.lng]}
-              radius={selected ? 22 : 16}
+              radius={selected ? 20 : 14}
               fillColor={color}
-              fillOpacity={0.9}
+              fillOpacity={0.92}
               color={selected ? '#f97316' : 'white'}
               weight={selected ? 3 : 2}
               eventHandlers={{ click: () => onSelectLocation?.(loc) }}
             >
               <Popup>
-                <div style={{ fontFamily: 'system-ui, sans-serif', minWidth: 190 }}>
-                  <p style={{ fontWeight: 700, margin: '0 0 3px', fontSize: 14 }}>{loc.name}</p>
-                  <p style={{ color: '#777', fontSize: 12, margin: '0 0 8px' }}>
-                    {loc.address}, {loc.city}
-                  </p>
+                <div style={{ fontFamily: 'system-ui, sans-serif', minWidth: 160 }}>
+                  <p style={{ fontWeight: 700, margin: '0 0 2px', fontSize: 13 }}>{loc.name}</p>
+                  <p style={{ color: '#999', fontSize: 11, margin: '0 0 7px' }}>{loc.city}, {loc.state}</p>
                   <span style={{
-                    background: color, color: 'white',
-                    padding: '2px 10px', borderRadius: 999,
-                    fontSize: 12, fontWeight: 700,
+                    background: color, color: '#fff',
+                    padding: '2px 10px', borderRadius: 999, fontSize: 12, fontWeight: 700,
                   }}>
                     Score: {score}
                   </span>
-                  {auvDisplay && (
-                    <p style={{ fontSize: 12, color: '#555', margin: '6px 0 0' }}>
-                      <strong>AUV:</strong> {auvDisplay}
+                  {loc.avg_unit_volume > 0 && (
+                    <p style={{ fontSize: 12, color: '#555', margin: '5px 0 0' }}>
+                      AUV: ${(loc.avg_unit_volume / 1_000_000).toFixed(2)}M
                     </p>
                   )}
-                  {loc.monthly_rent && (
-                    <p style={{ fontSize: 11, color: '#999', margin: '4px 0 0' }}>
-                      ${loc.monthly_rent.toLocaleString()}/mo &middot;{' '}
-                      {loc.square_footage?.toLocaleString() ?? '—'} sq ft
-                    </p>
-                  )}
+                  <p style={{ fontSize: 11, color: '#aaa', margin: '3px 0 0' }}>
+                    Click pin for details
+                  </p>
                 </div>
               </Popup>
             </CircleMarker>
