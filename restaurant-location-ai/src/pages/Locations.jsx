@@ -48,7 +48,7 @@ export default function Locations() {
   };
 
   return (
-    <div className="p-4 sm:p-6 max-w-7xl mx-auto">
+    <div className="p-4 sm:p-6 max-w-7xl mx-auto pb-28">
       {/* Header */}
       <div className="flex items-center justify-between mb-5 gap-3">
         <div className="flex items-center gap-2">

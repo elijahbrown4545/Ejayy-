@@ -55,7 +55,7 @@ export default function InteractiveMap({
   const validLocations = locations.filter(l => isValid(l.lat, l.lng));
 
   return (
-    <div className="w-full h-full rounded-xl overflow-hidden border border-gray-100">
+    <div className="w-full h-full overflow-hidden">
       <MapContainer
         center={[41.5868, -87.4]}
         zoom={11}
