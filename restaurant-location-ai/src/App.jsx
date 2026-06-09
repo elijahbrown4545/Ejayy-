@@ -5,6 +5,7 @@ import Locations from './pages/Locations';
 import SurveyPage from './pages/SurveyPage';
 import Compare from './pages/Compare';
 import Admin from './pages/Admin';
+import Expansion from './pages/Expansion';
 
 export default function App() {
   return (
@@ -17,6 +18,7 @@ export default function App() {
           <Route path="survey" element={<SurveyPage />} />
           <Route path="compare" element={<Compare />} />
           <Route path="admin" element={<Admin />} />
+          <Route path="expansion" element={<Expansion />} />
         </Route>
       </Routes>
     </BrowserRouter>

@@ -19,6 +19,9 @@ const EMPTY = {
   square_footage: '',
   parking_spaces: '',
   notes: '',
+  avg_unit_volume: '',
+  weekly_customers: '',
+  primary_market: '',
 };
 
 function Field({ label, children }) {
@@ -74,9 +77,11 @@ export default function LocationForm({ initial, onSubmit, onCancel, loading }) {
       ...form,
       lat: parseFloat(form.lat),
       lng: parseFloat(form.lng),
-      monthly_rent:   form.monthly_rent   ? parseFloat(form.monthly_rent)   : null,
-      square_footage: form.square_footage ? parseInt(form.square_footage)   : null,
-      parking_spaces: form.parking_spaces ? parseInt(form.parking_spaces)   : null,
+      monthly_rent:    form.monthly_rent    ? parseFloat(form.monthly_rent)    : null,
+      square_footage:  form.square_footage  ? parseInt(form.square_footage)    : null,
+      parking_spaces:  form.parking_spaces  ? parseInt(form.parking_spaces)    : null,
+      avg_unit_volume: form.avg_unit_volume ? parseFloat(form.avg_unit_volume) : null,
+      weekly_customers: form.weekly_customers ? parseInt(form.weekly_customers) : null,
     });
   };
 
@@ -148,6 +153,39 @@ export default function LocationForm({ initial, onSubmit, onCancel, loading }) {
             </Field>
             <Field label="Parking Spots">
               <Input name="parking_spaces" type="number" value={form.parking_spaces} onChange={set} placeholder="20" />
+            </Field>
+          </div>
+
+          <div className="bg-blue-50 rounded-xl p-4 space-y-3">
+            <p className="text-xs font-semibold text-blue-700 uppercase tracking-wide">Business Performance</p>
+            <div className="grid grid-cols-2 gap-3">
+              <Field label="Annual Revenue (AUV) $">
+                <Input
+                  name="avg_unit_volume"
+                  type="number"
+                  value={form.avg_unit_volume}
+                  onChange={set}
+                  placeholder="1200000"
+                />
+              </Field>
+              <Field label="Weekly Customers">
+                <Input
+                  name="weekly_customers"
+                  type="number"
+                  value={form.weekly_customers}
+                  onChange={set}
+                  placeholder="2000"
+                />
+              </Field>
+            </div>
+            <Field label="Primary Market / Trade Area">
+              <Input
+                name="primary_market"
+                type="text"
+                value={form.primary_market}
+                onChange={set}
+                placeholder="e.g. Downtown, North Side"
+              />
             </Field>
           </div>
 

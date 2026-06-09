@@ -1,5 +1,5 @@
 import { NavLink } from 'react-router-dom';
-import { Map, Building2, ClipboardList, BarChart3, LayoutDashboard, X } from 'lucide-react';
+import { Map, Building2, ClipboardList, BarChart3, LayoutDashboard, X, TrendingUp } from 'lucide-react';
 import clsx from 'clsx';
 
 const NAV_ITEMS = [
@@ -7,6 +7,7 @@ const NAV_ITEMS = [
   { to: '/locations', icon: Building2,     label: 'Locations' },
   { to: '/survey',    icon: ClipboardList, label: 'Surveys' },
   { to: '/compare',   icon: BarChart3,     label: 'Compare Sites' },
+  { to: '/expansion', icon: TrendingUp,    label: 'Expansion AI' },
   { to: '/admin',     icon: LayoutDashboard, label: 'Admin' },
 ];
 
