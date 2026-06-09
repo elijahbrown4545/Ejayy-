@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { X } from 'lucide-react';
+import { X, MapPin, Loader2, ChevronDown, ChevronUp } from 'lucide-react';
 import { SCORE_LABELS } from '../../lib/scoring';
 
 const EMPTY = {
@@ -65,10 +65,38 @@ function ScoreSlider({ label, name, value, onChange }) {
 
 export default function LocationForm({ initial, onSubmit, onCancel, loading }) {
   const [form, setForm] = useState({ ...EMPTY, ...initial });
+  const [geocoding, setGeocoding] = useState(false);
+  const [geocodeError, setGeocodeError] = useState('');
+  const [showScores, setShowScores] = useState(false);
 
   const set = e => {
     const { name, value, type } = e.target;
     setForm(f => ({ ...f, [name]: type === 'range' || type === 'number' ? Number(value) : value }));
+  };
+
+  const findCoordinates = async () => {
+    const query = [form.address, form.city, form.state].filter(Boolean).join(', ');
+    if (!query.trim()) {
+      setGeocodeError('Enter an address, city, or state first.');
+      return;
+    }
+    setGeocoding(true);
+    setGeocodeError('');
+    try {
+      const res = await fetch(
+        `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(query)}&format=json&limit=1`,
+        { headers: { 'Accept-Language': 'en-US,en' } }
+      );
+      const data = await res.json();
+      if (data.length > 0) {
+        setForm(f => ({ ...f, lat: parseFloat(data[0].lat).toFixed(6), lng: parseFloat(data[0].lon).toFixed(6) }));
+      } else {
+        setGeocodeError('Address not found. Try being more specific.');
+      }
+    } catch {
+      setGeocodeError('Could not look up coordinates. Check your connection.');
+    }
+    setGeocoding(false);
   };
 
   const handleSubmit = e => {
@@ -98,7 +126,7 @@ export default function LocationForm({ initial, onSubmit, onCancel, loading }) {
         <form onSubmit={handleSubmit} className="overflow-y-auto flex-1 px-6 py-4 space-y-4">
           <div className="grid grid-cols-2 gap-3">
             <Field label="Location Name *">
-              <Input name="name" value={form.name} onChange={set} required placeholder="e.g. Downtown Corner" />
+              <Input name="name" value={form.name} onChange={set} required placeholder="e.g. Hammond Hohman Ave" />
             </Field>
             <Field label="Status">
               <select
@@ -115,49 +143,48 @@ export default function LocationForm({ initial, onSubmit, onCancel, loading }) {
             </Field>
           </div>
 
-          <Field label="Address *">
-            <Input name="address" value={form.address} onChange={set} required placeholder="123 Main St" />
+          <Field label="Address">
+            <Input name="address" value={form.address} onChange={set} placeholder="123 Main St" />
           </Field>
 
           <div className="grid grid-cols-2 gap-3">
             <Field label="City *">
-              <Input name="city" value={form.city} onChange={set} required placeholder="Austin" />
+              <Input name="city" value={form.city} onChange={set} required placeholder="Hammond" />
             </Field>
             <Field label="State">
-              <Input name="state" value={form.state} onChange={set} placeholder="TX" />
+              <Input name="state" value={form.state} onChange={set} placeholder="IN" />
             </Field>
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
-            <Field label="Latitude *">
-              <Input name="lat" type="number" step="any" value={form.lat} onChange={set} required placeholder="30.2672" />
-            </Field>
-            <Field label="Longitude *">
-              <Input name="lng" type="number" step="any" value={form.lng} onChange={set} required placeholder="-97.7431" />
-            </Field>
+          {/* Coordinates with auto-find */}
+          <div className="space-y-2">
+            <div className="grid grid-cols-2 gap-3">
+              <Field label="Latitude *">
+                <Input name="lat" type="number" step="any" value={form.lat} onChange={set} required placeholder="41.6139" />
+              </Field>
+              <Field label="Longitude *">
+                <Input name="lng" type="number" step="any" value={form.lng} onChange={set} required placeholder="-87.4992" />
+              </Field>
+            </div>
+            <button
+              type="button"
+              onClick={findCoordinates}
+              disabled={geocoding}
+              className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-blue-50 text-blue-700 text-xs font-medium hover:bg-blue-100 transition-colors disabled:opacity-50"
+            >
+              {geocoding
+                ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                : <MapPin className="w-3.5 h-3.5" />}
+              {geocoding ? 'Finding…' : 'Auto-fill coordinates from address'}
+            </button>
+            {geocodeError && <p className="text-xs text-red-500">{geocodeError}</p>}
           </div>
 
-          <div className="bg-gray-50 rounded-xl p-4 space-y-3">
-            <p className="text-xs font-semibold text-gray-700 uppercase tracking-wide">Scoring Dimensions</p>
-            {Object.entries(SCORE_LABELS).map(([key, label]) => (
-              <ScoreSlider key={key} label={label} name={key} value={form[key]} onChange={set} />
-            ))}
-          </div>
-
-          <div className="grid grid-cols-3 gap-3">
-            <Field label="Monthly Rent ($)">
-              <Input name="monthly_rent" type="number" value={form.monthly_rent} onChange={set} placeholder="6000" />
-            </Field>
-            <Field label="Sq Footage">
-              <Input name="square_footage" type="number" value={form.square_footage} onChange={set} placeholder="2000" />
-            </Field>
-            <Field label="Parking Spots">
-              <Input name="parking_spaces" type="number" value={form.parking_spaces} onChange={set} placeholder="20" />
-            </Field>
-          </div>
-
+          {/* Business performance — primary section */}
           <div className="bg-blue-50 rounded-xl p-4 space-y-3">
-            <p className="text-xs font-semibold text-blue-700 uppercase tracking-wide">Business Performance</p>
+            <p className="text-xs font-semibold text-blue-700 uppercase tracking-wide">
+              Business Performance
+            </p>
             <div className="grid grid-cols-2 gap-3">
               <Field label="Annual Revenue (AUV) $">
                 <Input
@@ -184,8 +211,21 @@ export default function LocationForm({ initial, onSubmit, onCancel, loading }) {
                 type="text"
                 value={form.primary_market}
                 onChange={set}
-                placeholder="e.g. Downtown, North Side"
+                placeholder="e.g. Hammond, North Side"
               />
+            </Field>
+          </div>
+
+          {/* Property details */}
+          <div className="grid grid-cols-3 gap-3">
+            <Field label="Monthly Rent ($)">
+              <Input name="monthly_rent" type="number" value={form.monthly_rent} onChange={set} placeholder="6000" />
+            </Field>
+            <Field label="Sq Footage">
+              <Input name="square_footage" type="number" value={form.square_footage} onChange={set} placeholder="2000" />
+            </Field>
+            <Field label="Parking Spots">
+              <Input name="parking_spaces" type="number" value={form.parking_spaces} onChange={set} placeholder="20" />
             </Field>
           </div>
 
@@ -194,11 +234,30 @@ export default function LocationForm({ initial, onSubmit, onCancel, loading }) {
               name="notes"
               value={form.notes}
               onChange={set}
-              rows={3}
+              rows={2}
               className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-400 resize-none"
-              placeholder="Additional observations..."
+              placeholder="Additional observations…"
             />
           </Field>
+
+          {/* Scoring — collapsed by default */}
+          <div className="border border-gray-100 rounded-xl overflow-hidden">
+            <button
+              type="button"
+              onClick={() => setShowScores(v => !v)}
+              className="w-full flex items-center justify-between px-4 py-3 bg-gray-50 text-xs font-semibold text-gray-600 hover:bg-gray-100 transition-colors"
+            >
+              <span>Advanced Scoring Dimensions</span>
+              {showScores ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+            </button>
+            {showScores && (
+              <div className="p-4 space-y-3">
+                {Object.entries(SCORE_LABELS).map(([key, label]) => (
+                  <ScoreSlider key={key} label={label} name={key} value={form[key]} onChange={set} />
+                ))}
+              </div>
+            )}
+          </div>
         </form>
 
         <div className="flex gap-3 px-6 py-4 border-t border-gray-100">

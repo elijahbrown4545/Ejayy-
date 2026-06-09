@@ -1,4 +1,5 @@
-import { MapContainer, TileLayer, CircleMarker, Popup } from 'react-leaflet';
+import { useEffect, useRef } from 'react';
+import { MapContainer, TileLayer, CircleMarker, Popup, useMap } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
 import { computeOverallScore } from '../../lib/scoring';
 import { generateDemandPoints } from '../../lib/expansion';
@@ -13,24 +14,40 @@ function scoreColor(score) {
   return '#ef4444';
 }
 
-export default function InteractiveMap({ locations, showHeatmap, selectedIds = [], onSelectLocation }) {
+function MapController({ flyTo }) {
+  const map = useMap();
+  const prev = useRef(null);
+  useEffect(() => {
+    if (flyTo && flyTo !== prev.current) {
+      prev.current = flyTo;
+      map.flyTo([flyTo.lat, flyTo.lng], flyTo.zoom ?? 13, { duration: 1.5 });
+    }
+  }, [flyTo, map]);
+  return null;
+}
+
+export default function InteractiveMap({
+  locations,
+  showHeatmap,
+  selectedIds = [],
+  onSelectLocation,
+  flyTo,
+  recommendations = [],
+}) {
   const demandPoints = showHeatmap ? generateDemandPoints(locations) : [];
 
   return (
     <div className="w-full h-full rounded-xl overflow-hidden border border-gray-100">
       <MapContainer
-        center={[30.2672, -97.7431]}
+        center={[41.5868, -87.4]}
         zoom={11}
         style={{ width: '100%', height: '100%' }}
         scrollWheelZoom
       >
-        {/* Satellite base layer */}
-        <TileLayer
-          attribution={SATELLITE_ATTRIBUTION}
-          url={SATELLITE_URL}
-        />
+        <TileLayer attribution={SATELLITE_ATTRIBUTION} url={SATELLITE_URL} />
+        <MapController flyTo={flyTo} />
 
-        {/* Demand heatmap circles (rendered below score markers) */}
+        {/* Demand heatmap circles */}
         {showHeatmap &&
           demandPoints.map((pt, idx) => (
             <CircleMarker
@@ -44,7 +61,41 @@ export default function InteractiveMap({ locations, showHeatmap, selectedIds = [
             />
           ))}
 
-        {/* Location score markers */}
+        {/* AI expansion recommendation markers */}
+        {recommendations.map((rec, idx) => (
+          <CircleMarker
+            key={`rec-${idx}`}
+            center={[rec.lat, rec.lng]}
+            radius={14}
+            fillColor="#8b5cf6"
+            fillOpacity={0.8}
+            color="#6d28d9"
+            weight={2}
+          >
+            <Popup>
+              <div style={{ fontFamily: 'system-ui, sans-serif', minWidth: 200 }}>
+                <p style={{ fontWeight: 700, margin: '0 0 5px', fontSize: 13, color: '#7c3aed' }}>
+                  AI Site Recommendation #{idx + 1}
+                </p>
+                <span style={{
+                  background: '#8b5cf6', color: 'white',
+                  padding: '2px 10px', borderRadius: 999,
+                  fontSize: 12, fontWeight: 700, display: 'inline-block', marginBottom: 8,
+                }}>
+                  Score: {rec.score} / 100
+                </span>
+                <p style={{ fontSize: 12, color: '#444', margin: '0 0 4px' }}>
+                  <strong>{rec.distanceToNearest.toFixed(1)} mi</strong> from {rec.nearestStore}
+                </p>
+                <p style={{ fontSize: 11, color: '#777', margin: 0, fontStyle: 'italic', lineHeight: 1.4 }}>
+                  {rec.reasoning}
+                </p>
+              </div>
+            </Popup>
+          </CircleMarker>
+        ))}
+
+        {/* Your location markers */}
         {locations.map((loc) => {
           const score = computeOverallScore(loc);
           const color = scoreColor(score);
@@ -71,16 +122,11 @@ export default function InteractiveMap({ locations, showHeatmap, selectedIds = [
                   <p style={{ color: '#777', fontSize: 12, margin: '0 0 8px' }}>
                     {loc.address}, {loc.city}
                   </p>
-                  <span
-                    style={{
-                      background: color,
-                      color: 'white',
-                      padding: '2px 10px',
-                      borderRadius: 999,
-                      fontSize: 12,
-                      fontWeight: 700,
-                    }}
-                  >
+                  <span style={{
+                    background: color, color: 'white',
+                    padding: '2px 10px', borderRadius: 999,
+                    fontSize: 12, fontWeight: 700,
+                  }}>
                     Score: {score}
                   </span>
                   {auvDisplay && (
