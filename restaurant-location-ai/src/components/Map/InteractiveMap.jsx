@@ -78,6 +78,7 @@ function StatusBadge({ status }) {
 
 export default function InteractiveMap({ locations, showHeatmap, selectedIds = [], onSelectLocation }) {
   const [popup, setPopup] = useState(null);
+  const [mapError, setMapError] = useState(null);
   const mapRef = useRef(null);
 
   const [viewState, setViewState] = useState({
@@ -118,6 +119,15 @@ export default function InteractiveMap({ locations, showHeatmap, selectedIds = [
           </div>
         </div>
       )}
+      {mapError && (
+        <div className="absolute inset-0 z-20 flex items-center justify-center bg-red-50">
+          <div className="text-center p-8 max-w-md">
+            <p className="text-lg font-semibold text-red-700 mb-2">Map Error</p>
+            <p className="text-sm text-red-600 font-mono break-all">{mapError}</p>
+            <p className="text-xs text-gray-500 mt-3">Check that your Mapbox token is valid and has no URL restrictions.</p>
+          </div>
+        </div>
+      )}
 
       <Map
         ref={mapRef}
@@ -126,6 +136,7 @@ export default function InteractiveMap({ locations, showHeatmap, selectedIds = [
         mapboxAccessToken={MAPBOX_TOKEN}
         mapStyle="mapbox://styles/mapbox/light-v11"
         style={{ width: '100%', height: '100%' }}
+        onError={e => setMapError(e.error?.message || JSON.stringify(e.error) || 'Unknown map error')}
         interactiveLayerIds={['unclustered-point', 'clusters']}
         onClick={e => {
           const feat = e.features?.[0];
