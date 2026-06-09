@@ -1,34 +1,42 @@
 /**
- * Overpass API wrapper — fetches real OSM data for a bounding box.
- * No API key required. Results are cached for 10 minutes per bbox.
+ * Overpass API wrapper — free, no key required.
+ * Fetches restaurants, retail anchors, and major roads for a bounding box.
+ * Results are cached 10 minutes per bbox.
  */
 
 const CACHE = new Map();
-const CACHE_TTL = 10 * 60 * 1000; // 10 min
+const CACHE_TTL = 10 * 60 * 1000;
+
+// Don't query areas larger than ~30×30 miles to keep requests fast
+const MAX_AREA_DEG = 0.5; // ~35 miles
 
 export async function fetchAreaData(bounds) {
-  const { north, south, east, west } = bounds;
-  const key = `${south.toFixed(2)},${west.toFixed(2)},${north.toFixed(2)},${east.toFixed(2)}`;
+  let { north, south, east, west } = bounds;
 
+  // Clamp if area is too large
+  const latSpan = north - south;
+  const lngSpan = east - west;
+  if (latSpan > MAX_AREA_DEG || lngSpan > MAX_AREA_DEG) {
+    const midLat = (north + south) / 2;
+    const midLng = (east + west) / 2;
+    const half = MAX_AREA_DEG / 2;
+    north = midLat + half; south = midLat - half;
+    east  = midLng + half; west  = midLng - half;
+  }
+
+  const key = `${south.toFixed(2)},${west.toFixed(2)},${north.toFixed(2)},${east.toFixed(2)}`;
   const hit = CACHE.get(key);
   if (hit && Date.now() - hit.ts < CACHE_TTL) return hit.data;
 
   const bbox = `${south},${west},${north},${east}`;
+
+  // Lean query — only the data we actually use for scoring
   const query =
-    `[out:json][timeout:30];` +
-    `(` +
-    // Restaurants / fast food / cafes
-    `node["amenity"~"^(restaurant|fast_food|cafe|food_court)$"](${bbox});` +
-    `way["amenity"~"^(restaurant|fast_food|cafe|food_court)$"](${bbox});` +
-    // Retail anchors
-    `node["shop"~"^(supermarket|department_store|wholesale|mall)$"](${bbox});` +
-    `way["shop"~"^(supermarket|department_store|wholesale|mall)$"](${bbox});` +
-    `node["name"~"Walmart|Target|Costco|Sam's Club|Meijer|Aldi|Jewel|Kroger",i](${bbox});` +
-    `way["name"~"Walmart|Target|Costco|Sam's Club|Meijer|Aldi|Jewel|Kroger",i](${bbox});` +
-    // Shopping centers / power centers
-    `node["landuse"="retail"](${bbox});` +
-    `way["landuse"="retail"](${bbox});` +
-    // Major roads (traffic proxy)
+    `[out:json][timeout:25];(` +
+    `node["amenity"~"^(restaurant|fast_food|cafe)$"](${bbox});` +
+    `way["amenity"~"^(restaurant|fast_food|cafe)$"](${bbox});` +
+    `node["shop"~"^(supermarket|department_store|mall|wholesale)$"](${bbox});` +
+    `way["shop"~"^(supermarket|department_store|mall|wholesale)$"](${bbox});` +
     `way["highway"~"^(motorway|motorway_link|trunk|trunk_link|primary|secondary)$"](${bbox});` +
     `);out center tags;`;
 
@@ -37,7 +45,9 @@ export async function fetchAreaData(bounds) {
       method: 'POST',
       body: 'data=' + encodeURIComponent(query),
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      signal: AbortSignal.timeout(28000),
     });
+
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const json = await res.json();
 
@@ -50,21 +60,17 @@ export async function fetchAreaData(bounds) {
       const lng = el.lon ?? el.center?.lon;
       if (!lat || !lng) continue;
 
-      const tags = el.tags || {};
+      const tags    = el.tags || {};
       const amenity = tags.amenity;
       const shop    = tags.shop;
       const highway = tags.highway;
       const name    = tags.name || tags.brand || '';
 
-      if (amenity && ['restaurant','fast_food','cafe','food_court'].includes(amenity)) {
-        restaurants.push({ lat, lng, name: name || amenity, brand: tags.brand || '', type: amenity });
-      } else if (
-        (shop && ['supermarket','department_store','wholesale','mall'].includes(shop)) ||
-        tags.landuse === 'retail' ||
-        /walmart|target|costco|meijer|aldi|jewel|kroger/i.test(name)
-      ) {
-        retailers.push({ lat, lng, name: name || shop || 'Retail', type: shop || 'retail' });
-      } else if (highway && ['motorway','motorway_link','trunk','trunk_link','primary','secondary'].includes(highway)) {
+      if (amenity && ['restaurant','fast_food','cafe'].includes(amenity)) {
+        restaurants.push({ lat, lng, name: name || amenity, type: amenity });
+      } else if (shop && ['supermarket','department_store','mall','wholesale'].includes(shop)) {
+        retailers.push({ lat, lng, name: name || shop, type: shop });
+      } else if (highway) {
         roads.push({ lat, lng, type: highway });
       }
     }
@@ -73,23 +79,23 @@ export async function fetchAreaData(bounds) {
     CACHE.set(key, { data, ts: Date.now() });
     return data;
   } catch (err) {
-    console.warn('[Overpass] fetch failed:', err.message);
+    console.warn('[Overpass]', err.message);
     return { restaurants: [], retailers: [], roads: [] };
   }
 }
 
-/** Simple single-radius competitor count (used in detail panel). */
+/** Competitor count within a radius (used in detail panel). */
 export async function fetchNearbyRestaurants(lat, lng, radiusMiles = 1) {
-  const radius = Math.round(radiusMiles * 1609);
-  const query =
-    `[out:json][timeout:15];` +
-    `(node["amenity"~"^(restaurant|fast_food)$"](around:${radius},${lat},${lng}););` +
-    `out count;`;
+  const r = Math.round(radiusMiles * 1609);
+  const q =
+    `[out:json][timeout:12];` +
+    `(node["amenity"~"^(restaurant|fast_food)$"](around:${r},${lat},${lng}););out count;`;
   try {
     const res = await fetch('https://overpass-api.de/api/interpreter', {
       method: 'POST',
-      body: 'data=' + encodeURIComponent(query),
+      body: 'data=' + encodeURIComponent(q),
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      signal: AbortSignal.timeout(14000),
     });
     const data = await res.json();
     return data.elements?.[0]?.tags?.total ?? null;

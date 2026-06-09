@@ -86,25 +86,18 @@ export default function MapView() {
     }, 800);
   }, []);
 
-  // ── Recompute heatmap + AI recs when data or locations change ───────────────
+  // ── Recompute heatmap — works immediately, gets smarter when Overpass loads ──
   useEffect(() => {
-    if (!areaData || !mapBounds) return;
-    if (showHeatmap) {
-      const grid = generateHeatGrid(mapBounds, areaData, locations);
-      setHeatPoints(grid);
-    } else {
-      setHeatPoints([]);
-    }
+    if (!mapBounds || !showHeatmap) { setHeatPoints([]); return; }
+    // areaData may be null — siteScore has a fallback for that case
+    const grid = generateHeatGrid(mapBounds, areaData, locations);
+    setHeatPoints(grid);
   }, [areaData, mapBounds, locations, showHeatmap]);
 
   useEffect(() => {
-    if (!areaData || !mapBounds) return;
-    if (showAI) {
-      const recs = generateScoredRecommendations(mapBounds, areaData, locations);
-      setRecommendations(recs);
-    } else {
-      setRecommendations([]);
-    }
+    if (!mapBounds || !showAI) { setRecommendations([]); return; }
+    const recs = generateScoredRecommendations(mapBounds, areaData, locations);
+    setRecommendations(recs);
   }, [areaData, mapBounds, locations, showAI]);
 
   // ── Search ──────────────────────────────────────────────────────────────────

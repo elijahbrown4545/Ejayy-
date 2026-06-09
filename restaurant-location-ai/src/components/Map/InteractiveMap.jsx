@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useCallback } from 'react';
 import {
   MapContainer, TileLayer, CircleMarker, Circle,
   Popup, Tooltip, useMap, useMapEvents,
@@ -6,59 +6,67 @@ import {
 import 'leaflet/dist/leaflet.css';
 import { computeOverallScore } from '../../lib/scoring';
 
-// ── Tile layers ──────────────────────────────────────────────────────────────
 const SATELLITE = {
   url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
   attr: '&copy; Esri',
 };
-// Transparent labels-only overlay — adds road names, POI labels, city names
+// Transparent labels-only overlay: restaurant names, road names, city labels
 const LABELS = {
   url: 'https://{s}.basemaps.cartocdn.com/light_only_labels/{z}/{x}/{y}{r}.png',
   attr: '&copy; CartoDB',
 };
 
-// ── Score → marker colour ────────────────────────────────────────────────────
 function ownColor(score) {
   if (score >= 75) return '#22c55e';
   if (score >= 55) return '#f59e0b';
   return '#ef4444';
 }
 
-// ── Internal helper components ───────────────────────────────────────────────
+// ── Fly-to controller ────────────────────────────────────────────────────────
 function MapController({ flyTo }) {
   const map = useMap();
   const prev = useRef(null);
   useEffect(() => {
     if (flyTo && flyTo !== prev.current) {
       prev.current = flyTo;
-      map.flyTo([flyTo.lat, flyTo.lng], flyTo.zoom ?? 13, { duration: 1.5 });
+      map.flyTo([flyTo.lat, flyTo.lng], flyTo.zoom ?? 14, { duration: 1.2 });
     }
   }, [flyTo, map]);
   return null;
 }
 
+// ── Emit bounds after map stops moving ───────────────────────────────────────
 function MapBoundsWatcher({ onBoundsChange }) {
   const map = useMap();
-  const scheduleRef = useRef(null);
+  const timer = useRef(null);
 
-  function emit() {
+  const emit = useCallback(() => {
     const b = map.getBounds();
     onBoundsChange({
-      north: b.getNorth(), south: b.getSouth(),
-      east: b.getEast(),  west: b.getWest(),
+      north: b.getNorth(),
+      south: b.getSouth(),
+      east:  b.getEast(),
+      west:  b.getWest(),
     });
-  }
+  }, [map, onBoundsChange]);
 
-  function debounced() {
-    clearTimeout(scheduleRef.current);
-    scheduleRef.current = setTimeout(emit, 700);
-  }
+  const debounced = useCallback(() => {
+    clearTimeout(timer.current);
+    timer.current = setTimeout(emit, 900);
+  }, [emit]);
 
   useMapEvents({ moveend: debounced, zoomend: debounced });
-  useEffect(() => { emit(); }, []); // initial load
+
+  // Fire once on mount
+  useEffect(() => {
+    const t = setTimeout(emit, 200);
+    return () => clearTimeout(t);
+  }, [emit]);
+
   return null;
 }
 
+// ── Right-click → add site ────────────────────────────────────────────────────
 function RightClickHandler({ onRightClick }) {
   useMapEvents({
     contextmenu(e) {
@@ -77,7 +85,7 @@ function isValid(lat, lng) {
   );
 }
 
-// ── Main component ────────────────────────────────────────────────────────────
+// ── Main map component ────────────────────────────────────────────────────────
 export default function InteractiveMap({
   locations = [],
   selectedIds = [],
@@ -85,11 +93,9 @@ export default function InteractiveMap({
   flyTo,
   onRightClick,
   onBoundsChange,
-  // layer data
-  competitors = [],     // OSM restaurants
-  heatPoints = [],      // pre-scored grid
-  recommendations = [], // AI picks
-  // toggles
+  competitors = [],
+  heatPoints = [],
+  recommendations = [],
   showCompetitors = false,
   showTerritories = false,
   showHeatmap = false,
@@ -98,40 +104,44 @@ export default function InteractiveMap({
   const validOwn = locations.filter(l => isValid(l.lat, l.lng));
 
   return (
-    <div className="w-full h-full overflow-hidden">
+    <div className="w-full h-full">
       <MapContainer
         center={[41.5868, -87.4]}
         zoom={11}
         style={{ width: '100%', height: '100%' }}
         scrollWheelZoom
-        zoomControl={false}
+        dragging
+        touchZoom
+        doubleClickZoom
+        zoomSnap={0.5}
       >
-        {/* Satellite base */}
+        {/* Satellite photo base */}
         <TileLayer attribution={SATELLITE.attr} url={SATELLITE.url} />
-        {/* Transparent labels overlay — shows restaurant names, roads, cities */}
-        <TileLayer attribution={LABELS.attr} url={LABELS.url} opacity={0.9} />
+        {/* Transparent text labels on top (shows restaurant/road names) */}
+        <TileLayer attribution={LABELS.attr} url={LABELS.url} opacity={0.95} />
 
         <MapController flyTo={flyTo} />
         {onBoundsChange && <MapBoundsWatcher onBoundsChange={onBoundsChange} />}
-        {onRightClick && <RightClickHandler onRightClick={onRightClick} />}
+        {onRightClick   && <RightClickHandler onRightClick={onRightClick} />}
 
-        {/* ── HEAT MAP ── */}
+        {/* ── HEAT MAP ─────────────────────────────────────────────────── */}
         {showHeatmap && heatPoints.map((pt, i) => (
           <CircleMarker
-            key={`heat-${i}`}
+            key={`h${i}`}
             center={[pt.lat, pt.lng]}
-            radius={Math.max(8, Math.round(pt.score / 6))}
+            radius={pt.radius}
             fillColor={pt.fill}
             fillOpacity={pt.opacity}
             color="transparent"
             weight={0}
+            interactive={false}
           />
         ))}
 
-        {/* ── TRADE AREA CIRCLES (1-mile radius) ── */}
+        {/* ── TRADE AREA CIRCLES ────────────────────────────────────────── */}
         {showTerritories && validOwn.map(loc => (
           <Circle
-            key={`territory-${loc.id}`}
+            key={`ta-${loc.id}`}
             center={[loc.lat, loc.lng]}
             radius={1609}
             color="#f97316"
@@ -139,71 +149,73 @@ export default function InteractiveMap({
             fillColor="#f97316"
             fillOpacity={0.06}
             dashArray="6,10"
+            interactive={false}
           />
         ))}
 
-        {/* ── COMPETITOR MARKERS (OSM restaurants, never own stores) ── */}
+        {/* ── COMPETITOR MARKERS ───────────────────────────────────────── */}
         {showCompetitors && competitors.map((c, i) => (
           <CircleMarker
-            key={`comp-${i}`}
+            key={`c${i}`}
             center={[c.lat, c.lng]}
             radius={5}
-            fillColor="#9e5a00"
-            fillOpacity={0.75}
+            fillColor="#92400e"
+            fillOpacity={0.78}
             color="#fff"
             weight={1}
           >
             {c.name && (
-              <Tooltip direction="top" offset={[0, -4]} opacity={0.92}>
-                <span style={{ fontFamily: 'system-ui', fontSize: 12 }}>
-                  {c.name}
-                </span>
+              <Tooltip direction="top" offset={[0, -5]} opacity={0.95}>
+                <span style={{ fontFamily: 'system-ui', fontSize: 12 }}>{c.name}</span>
               </Tooltip>
             )}
           </CircleMarker>
         ))}
 
-        {/* ── AI RECOMMENDATION MARKERS ── */}
+        {/* ── AI RECOMMENDATION MARKERS ────────────────────────────────── */}
         {showAI && recommendations.map((rec, idx) => (
           <CircleMarker
-            key={`rec-${idx}`}
+            key={`r${idx}`}
             center={[rec.lat, rec.lng]}
             radius={16}
             fillColor="#7c3aed"
-            fillOpacity={0.88}
+            fillOpacity={0.9}
             color="#fff"
             weight={2}
           >
             <Popup>
-              <div style={{ fontFamily: 'system-ui, sans-serif', minWidth: 210 }}>
-                <p style={{ fontWeight: 800, margin: '0 0 4px', fontSize: 13, color: '#6d28d9' }}>
+              <div style={{ fontFamily: 'system-ui, sans-serif', minWidth: 215 }}>
+                <p style={{ fontWeight: 800, margin: '0 0 4px', fontSize: 14, color: '#6d28d9' }}>
                   AI Site #{idx + 1}
                 </p>
                 <span style={{
-                  background: '#7c3aed', color: '#fff', padding: '2px 10px',
-                  borderRadius: 999, fontSize: 12, fontWeight: 700, display: 'inline-block', marginBottom: 8,
+                  background: '#7c3aed', color: '#fff', padding: '2px 12px',
+                  borderRadius: 999, fontSize: 12, fontWeight: 700,
+                  display: 'inline-block', marginBottom: 10,
                 }}>
                   Opportunity Score: {rec.score} / 100
                 </span>
-                <table style={{ width: '100%', fontSize: 11, borderCollapse: 'collapse' }}>
-                  <tbody>
-                    {rec.breakdown && Object.entries({
-                      'Road Access': rec.breakdown.road,
-                      'Retail Synergy': rec.breakdown.retail,
-                      'Competition Signal': rec.breakdown.competition,
-                      'Cannibalization': rec.breakdown.cannibalization,
-                    }).map(([k, v]) => (
-                      <tr key={k}>
-                        <td style={{ color: '#666', paddingRight: 8, paddingBottom: 2 }}>{k}</td>
-                        <td style={{ fontWeight: 600, color: v < 0 ? '#dc2626' : '#16a34a' }}>
-                          {v > 0 ? '+' : ''}{v}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+                {rec.breakdown && (
+                  <table style={{ width: '100%', fontSize: 12, borderCollapse: 'collapse' }}>
+                    <tbody>
+                      {[
+                        ['Road Access',       rec.breakdown.road],
+                        ['Retail Synergy',    rec.breakdown.retail],
+                        ['Competition Signal',rec.breakdown.competition],
+                        ['Cannibalization',   rec.breakdown.cannibalization],
+                      ].map(([k, v]) => (
+                        <tr key={k} style={{ borderBottom: '1px solid #f3f4f6' }}>
+                          <td style={{ color: '#6b7280', padding: '3px 8px 3px 0' }}>{k}</td>
+                          <td style={{ fontWeight: 700, color: v < 0 ? '#dc2626' : '#16a34a', textAlign: 'right' }}>
+                            {v > 0 ? '+' : ''}{v} pts
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                )}
                 {rec.nearestStore && rec.nearestStore !== 'N/A' && (
-                  <p style={{ fontSize: 11, color: '#888', margin: '6px 0 0', fontStyle: 'italic' }}>
+                  <p style={{ fontSize: 11, color: '#9ca3af', margin: '7px 0 0', fontStyle: 'italic' }}>
                     {rec.distanceToNearest?.toFixed(1)} mi from {rec.nearestStore}
                   </p>
                 )}
@@ -212,7 +224,7 @@ export default function InteractiveMap({
           </CircleMarker>
         ))}
 
-        {/* ── OWN LOCATION MARKERS ── */}
+        {/* ── OWN LOCATION MARKERS ─────────────────────────────────────── */}
         {validOwn.map(loc => {
           const score = computeOverallScore(loc);
           const color = ownColor(score);
@@ -228,7 +240,7 @@ export default function InteractiveMap({
               weight={selected ? 3 : 2}
               eventHandlers={{ click: () => onSelectLocation?.(loc) }}
             >
-              <Tooltip direction="top" offset={[0, -6]} permanent={false}>
+              <Tooltip direction="top" offset={[0, -7]} opacity={0.95}>
                 <span style={{ fontFamily: 'system-ui', fontSize: 12, fontWeight: 600 }}>
                   {loc.name}
                 </span>
@@ -236,21 +248,21 @@ export default function InteractiveMap({
               <Popup>
                 <div style={{ fontFamily: 'system-ui, sans-serif', minWidth: 175 }}>
                   <p style={{ fontWeight: 700, margin: '0 0 3px', fontSize: 14 }}>{loc.name}</p>
-                  <p style={{ color: '#888', fontSize: 11, margin: '0 0 8px' }}>
+                  <p style={{ color: '#9ca3af', fontSize: 11, margin: '0 0 8px' }}>
                     {[loc.address, loc.city, loc.state].filter(Boolean).join(', ')}
                   </p>
                   <span style={{
                     background: color, color: '#fff',
-                    padding: '2px 10px', borderRadius: 999, fontSize: 12, fontWeight: 700,
+                    padding: '2px 12px', borderRadius: 999, fontSize: 12, fontWeight: 700,
                   }}>
                     Score: {score}
                   </span>
                   {loc.avg_unit_volume > 0 && (
-                    <p style={{ fontSize: 12, color: '#555', margin: '6px 0 0' }}>
+                    <p style={{ fontSize: 12, color: '#374151', margin: '7px 0 0' }}>
                       AUV: ${(loc.avg_unit_volume / 1_000_000).toFixed(2)}M
                     </p>
                   )}
-                  <p style={{ fontSize: 11, color: '#aaa', margin: '3px 0 0' }}>Click pin for full details</p>
+                  <p style={{ fontSize: 11, color: '#d1d5db', margin: '3px 0 0' }}>Click for full details</p>
                 </div>
               </Popup>
             </CircleMarker>
